@@ -29,6 +29,7 @@ public class SVGBuilder {
 	private boolean whiteMode = false;
 	private boolean overideOpacity = false;
 	private boolean closeInputStream = true;
+	private boolean pathOnly = false;
 
 	/**
 	 * Parse SVG data from an input stream.
@@ -145,6 +146,14 @@ public class SVGBuilder {
 	}
 
 	/**
+	 * Extract only stroke data; store it in a {@link android.graphics.Path}.
+	 */
+	public SVGBuilder setPathOnly(boolean pathOnly) {
+		this.pathOnly = pathOnly;
+		return this;
+	}
+
+	/**
 	 * Loads, reads, parses the SVG (or SVGZ).
 	 * 
 	 * @return the parsed SVG.
@@ -159,6 +168,7 @@ public class SVGBuilder {
 			final SVGHandler handler = new SVGHandler();
 			handler.setColorSwap(searchColor, replaceColor, overideOpacity);
 			handler.setWhiteMode(whiteMode);
+			handler.setPathOnly(pathOnly);
 			if (strokeColorFilter != null) {
 				handler.strokePaint.setColorFilter(strokeColorFilter);
 			}

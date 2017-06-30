@@ -78,7 +78,7 @@ public class SVGParser {
 			}
 			xr.parse(data);
 
-			SVG result = new SVG(picture, handler.bounds);
+			SVG result = handler.pathOnly ? new SVG(handler.fullPath, handler.bounds) : new SVG(picture, handler.bounds);
 			// Skip bounds if it was an empty pic
 			if (!Float.isInfinite(handler.limits.top)) {
 				result.setLimits(handler.limits);
@@ -857,6 +857,9 @@ public class SVGParser {
 		Float textSize;
 		Matrix font_matrix;
 
+		boolean pathOnly = false;
+		Path fullPath;
+
 		// Scratch rect (so we aren't constantly making new ones)
 		final RectF rect = new RectF();
 		RectF bounds = null;
@@ -908,6 +911,11 @@ public class SVGParser {
 			this.whiteMode = whiteMode;
 		}
 
+		public void setPathOnly(boolean pathOnly) {
+			this.pathOnly = pathOnly;
+			this.fullPath = pathOnly ? new Path() : null;
+		}
+
 		@Override
 		public void startDocument() throws SAXException {
 			// Set up prior to parsing a doc
@@ -921,7 +929,7 @@ public class SVGParser {
 		private final Matrix gradMatrix = new Matrix();
 
 		private boolean doFill(Properties atts, RectF bounding_box) {
-			if ("none".equals(atts.getString("display"))) {
+			if (pathOnly || "none".equals(atts.getString("display"))) {
 				return false;
 			}
 			if (whiteMode) {
@@ -1247,7 +1255,7 @@ public class SVGParser {
 			}
 		}
 
-        private String SVG_FILL = null;
+		private String SVG_FILL = null;
 
 		@Override
 		public void startElement(String namespaceURI, String localName, String qName, Attributes atts)
@@ -1312,11 +1320,11 @@ public class SVGParser {
 
 			} else if (localName.equals("defs")) {
 				// Ignore
-			} else if (localName.equals("linearGradient")) {
+			} else if (!pathOnly && localName.equals("linearGradient")) {
 				gradient = doGradient(true, atts);
-			} else if (localName.equals("radialGradient")) {
+			} else if (!pathOnly && localName.equals("radialGradient")) {
 				gradient = doGradient(false, atts);
-			} else if (localName.equals("stop")) {
+			} else if (!pathOnly && localName.equals("stop")) {
 				if (gradient != null) {
 					final Properties props = new Properties(atts);
 
@@ -1386,12 +1394,13 @@ public class SVGParser {
 				Float height = getFloatAttr("height", atts);
 				Float rx = getFloatAttr("rx", atts, 0f);
 				Float ry = getFloatAttr("ry", atts, 0f);
+				boolean round = rx > 0f && ry > 0f;
 				pushTransform(atts);
 				Properties props = new Properties(atts);
 				rect.set(x, y, x + width, y + height);
 				if (doFill(props, rect)) {
 					rect.set(x, y, x + width, y + height);
-					if (rx <= 0f && ry <= 0f) {
+					if (!round) {
 						canvas.drawRect(rect, fillPaint);
 					} else {
 						canvas.drawRoundRect(rect, rx, ry, fillPaint);
@@ -1400,12 +1409,22 @@ public class SVGParser {
 				}
 				if (doStroke(props)) {
 					rect.set(x, y, x + width, y + height);
-					if (rx <= 0f && ry <= 0f) {
-						canvas.drawRect(rect, strokePaint);
+					if (pathOnly) {
+						Path p = new Path();
+						if (!round) {
+							p.addRect(rect, Path.Direction.CW);
+						} else {
+							p.addRoundRect(rect, rx, ry, Path.Direction.CW);
+						}
+						fullPath.addPath(p, matrixStack.getLast());
 					} else {
-						canvas.drawRoundRect(rect, rx, ry, strokePaint);
+						if (!round) {
+							canvas.drawRect(rect, strokePaint);
+						} else {
+							canvas.drawRoundRect(rect, rx, ry, strokePaint);
+						}
+						doLimits(rect, strokePaint);
 					}
-					doLimits(rect, strokePaint);
 				}
 				popTransform();
 			} else if (!hidden && localName.equals("line")) {
@@ -1416,12 +1435,20 @@ public class SVGParser {
 				Properties props = new Properties(atts);
 				if (doStroke(props)) {
 					pushTransform(atts);
-					rect.set(x1, y1, x2, y2);
-					canvas.drawLine(x1, y1, x2, y2, strokePaint);
-					doLimits(rect, strokePaint);
+					if (pathOnly) {
+						Path p = new Path();
+						p.moveTo(x1, y1);
+						p.lineTo(x2, y2);
+						p.close();
+						fullPath.addPath(p, matrixStack.getLast());
+					} else {
+						rect.set(x1, y1, x2, y2);
+						canvas.drawLine(x1, y1, x2, y2, strokePaint);
+						doLimits(rect, strokePaint);
+					}
 					popTransform();
 				}
-			} else if (!hidden && localName.equals("text")) {
+			} else if (!hidden && !pathOnly && localName.equals("text")) {
 				Float textX = getFloatAttr("x", atts);
 				Float textY = getFloatAttr("y", atts);
 				Float fontSize = getFloatAttr("font-size", atts);
@@ -1458,7 +1485,6 @@ public class SVGParser {
 				if (localName.equals("ellipse")) {
 					radiusX = getFloatAttr("rx", atts);
 					radiusY = getFloatAttr("ry", atts);
-
 				} else {
 					radiusX = radiusY = getFloatAttr("r", atts);
 				}
@@ -1471,8 +1497,14 @@ public class SVGParser {
 						doLimits(rect);
 					}
 					if (doStroke(props)) {
-						canvas.drawOval(rect, strokePaint);
-						doLimits(rect, strokePaint);
+						if (pathOnly) {
+							Path p = new Path();
+							p.addOval(rect, Path.Direction.CW);
+							fullPath.addPath(p, matrixStack.getLast());
+						} else {
+							canvas.drawOval(rect, strokePaint);
+							doLimits(rect, strokePaint);
+						}
 					}
 					popTransform();
 				}
@@ -1500,8 +1532,12 @@ public class SVGParser {
 							doLimits(rect);
 						}
 						if (doStroke(props)) {
-							canvas.drawPath(p, strokePaint);
-							doLimits(rect, strokePaint);
+							if (pathOnly) {
+								fullPath.addPath(p, matrixStack.getLast());
+							} else {
+								canvas.drawPath(p, strokePaint);
+								doLimits(rect, strokePaint);
+							}
 						}
 						popTransform();
 					}
@@ -1516,8 +1552,12 @@ public class SVGParser {
 					doLimits(rect);
 				}
 				if (doStroke(props)) {
-					canvas.drawPath(p, strokePaint);
-					doLimits(rect, strokePaint);
+					if (pathOnly) {
+						fullPath.addPath(p, matrixStack.getLast());
+					} else {
+						canvas.drawPath(p, strokePaint);
+						doLimits(rect, strokePaint);
+					}
 				}
 				popTransform();
 			} else if (!hidden) {

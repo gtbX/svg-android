@@ -1,5 +1,6 @@
 package com.larvalabs.svgandroid;
 
+import android.graphics.Path;
 import android.graphics.Picture;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
@@ -32,6 +33,11 @@ public class SVG {
 	private final RectF bounds;
 
 	/**
+	 * The parsed Path.
+	 */
+	private final Path path;
+
+	/**
 	 * These are the estimated bounds of the SVG computed from the SVG elements while parsing. Note that this could be
 	 * null if there was a failure to compute limits (ie. an empty SVG).
 	 */
@@ -48,6 +54,19 @@ public class SVG {
 	SVG(Picture picture, RectF bounds) {
 		this.picture = picture;
 		this.bounds = bounds;
+		this.path = null;
+	}
+
+	/**
+	 * Construct a new SVG.
+	 *
+	 * @param path the parsed paths.
+	 * @param bounds the bounds computed from the "bounds" layer in the SVG.
+	 */
+	SVG(Path path, RectF bounds) {
+		this.picture = null;
+		this.bounds = bounds;
+		this.path = path;
 	}
 
 	/**
@@ -120,5 +139,13 @@ public class SVG {
 	 */
 	public RectF getLimits() {
 		return limits;
+	}
+
+	/**
+	 * Gets the combined path for all stroked elements in the SVG, except text.
+	 * @return path contained in this SVG.
+	 */
+	public Path getPath() {
+		return path;
 	}
 }
