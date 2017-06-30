@@ -1418,6 +1418,13 @@ public class SVGParser {
 				Float height = getFloatAttr("height", atts);
 				Float rx = getFloatAttr("rx", atts, 0f);
 				Float ry = getFloatAttr("ry", atts, 0f);
+				if (rx > 0f && ry <= 0f) {
+					ry = rx;
+				} else if (rx <= 0f && ry > 0f) {
+					rx = ry;
+				}
+				rx = Math.min(rx, width / 2);
+				ry = Math.min(ry, height / 2);
 				pushTransform(atts);
 				Properties props = new Properties(atts);
 				rect.set(x, y, x + width, y + height);
